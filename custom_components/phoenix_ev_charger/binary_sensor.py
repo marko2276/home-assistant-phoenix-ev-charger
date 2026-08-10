@@ -1,58 +1,66 @@
-import logging
-from typing import Any, Dict, Optional
+from dataclasses import dataclass
 
+from homeassistant.components.binary_sensor import BinarySensorEntity, BinarySensorEntityDescription
 from homeassistant.const import CONF_NAME
 from homeassistant.core import callback
-from homeassistant.helpers.entity import Entity
+from homeassistant.helpers.entity import DeviceInfo
 
-from .const import ATTR_MANUFACTURER, DEVICE_STATUSSES, DOMAIN, BINARY_SENSOR_TYPES, DIGITAL_STATUS
+from .const import ATTR_MANUFACTURER, DOMAIN, BINARY_SENSOR_TYPES, DIGITAL_STATUS
 
-_LOGGER = logging.getLogger(__name__)
+
+@dataclass(frozen=True, kw_only=True)
+class PhoenixEvBinarySensorEntityDescription(BinarySensorEntityDescription):
+    """Describes Phoenix EV binary sensor entities."""
+
+    value_key: str
+    is_digital_input: bool
+
+
+BINARY_SENSOR_DESCRIPTIONS: tuple[PhoenixEvBinarySensorEntityDescription, ...] = tuple(
+    PhoenixEvBinarySensorEntityDescription(
+        key=sensor_info[1],
+        name=sensor_info[0],
+        icon=sensor_info[3],
+        value_key=sensor_info[1],
+        is_digital_input=sensor_info[4],
+    )
+    for sensor_info in BINARY_SENSOR_TYPES.values()
+)
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
+    """Set up Phoenix EV binary sensors from a config entry."""
     hub_name = entry.data[CONF_NAME]
     hub = hass.data[DOMAIN][hub_name]["hub"]
 
-    device_info = {
-        "identifiers": {(DOMAIN, hub_name)},
-        "name": hub_name,
-        "manufacturer": ATTR_MANUFACTURER,
-    }
+    device_info = DeviceInfo(
+        identifiers={(DOMAIN, hub_name)},
+        name=hub_name,
+        manufacturer=ATTR_MANUFACTURER,
+    )
 
-    entities = []
-    for binary_sensor_info in BINARY_SENSOR_TYPES.values():
-        binary_sensor = PevcBinary_sensor(
-            hub_name,
-            hub,
-            device_info,
-            binary_sensor_info[0],
-            binary_sensor_info[1],
-            binary_sensor_info[2],
-            binary_sensor_info[3],
-            binary_sensor_info[4]
-        )
-        entities.append(binary_sensor)
-
-    async_add_entities(entities)
+    async_add_entities(
+        [
+            PhoenixEvBinarySensor(hub_name, hub, device_info, description)
+            for description in BINARY_SENSOR_DESCRIPTIONS
+        ]
+    )
     return True
 
 
-class PevcBinary_sensor(Entity):
+class PhoenixEvBinarySensor(BinarySensorEntity):
     """Representation of an PEVC Modbus binary_sensor."""
 
-    def __init__(self, platform_name, hub, device_info, name, key, unit, icon, digin):
-        """Initialize the binary_sensor."""
-        self._platform_name = platform_name
-        self._hub = hub
-        self._key = key
-        self._name = name
-        self._unit_of_measurement = unit
-        self._icon = icon
-        self._device_info = device_info
-        self._digin = digin
-        self._is_on = False
+    _attr_has_entity_name = True
 
+    def __init__(self, platform_name, hub, device_info, description: PhoenixEvBinarySensorEntityDescription):
+        """Initialize the binary_sensor."""
+        self._hub = hub
+        self.entity_description = description
+        self._value_key = description.value_key
+        self._is_digital_input = description.is_digital_input
+        self._attr_unique_id = f"{platform_name}_{description.key}"
+        self._attr_device_info = device_info
 
     async def async_added_to_hass(self):
         """Register callbacks."""
@@ -65,50 +73,23 @@ class PevcBinary_sensor(Entity):
     def _modbus_data_updated(self):
         self.async_write_ha_state()
 
-    @callback
-    def _update_state(self):
-        if self._key in self._hub.data:
-            self._state = self._hub.data[self._key]
-
-    @property
-    def name(self):
-        """Return the name."""
-        return f"{self._platform_name} {self._name}"
-
-    @property
-    def unique_id(self) -> Optional[str]:
-        return f"{self._platform_name}_{self._key}"
-
-    @property
-    def unit_of_measurement(self):
-        """Return the unit of measurement."""
-        return self._unit_of_measurement
-
     @property
     def icon(self):
         """Return the binary_sensor icon."""
-        if self._key in self._hub.data:
-            if self._hub.data[self._key] == DIGITAL_STATUS[True]:
-                if self._digin == True:
-                    return "mdi:electric-switch-closed" 
-                else:
-                    return "mdi:lightbulb-on"
-            else:
-                if self._digin == True:
-                    return "mdi:electric-switch"
-                else:
-                    return "mdi:lightbulb-outline"
-        return self._icon
+        if self._value_key in self._hub.data:
+            if self._hub.data[self._value_key] == DIGITAL_STATUS[True]:
+                if self._is_digital_input:
+                    return "mdi:electric-switch-closed"
+                return "mdi:lightbulb-on"
+            if self._is_digital_input:
+                return "mdi:electric-switch"
+            return "mdi:lightbulb-outline"
+        return self.entity_description.icon
 
     @property
-    def state(self):
-        """Return the state of the binary_sensor."""
-        if self._key in self._hub.data:
-            return self._hub.data[self._key]
-
-    @property
-    def state_attributes(self) -> Optional[Dict[str, Any]]:
-        return None
+    def available(self) -> bool:
+        """Return if the entity is available."""
+        return self._hub.is_connected()
 
     @property
     def should_poll(self) -> bool:
@@ -117,9 +98,5 @@ class PevcBinary_sensor(Entity):
 
     @property
     def is_on(self) -> bool:
-        if self._key in self._hub.data:
-            return self._hub.data[self._key] == DIGITAL_STATUS[True]
-
-    @property
-    def device_info(self) -> Optional[Dict[str, Any]]:
-        return self._device_info
+        """Return binary sensor on/off state."""
+        return self._hub.data.get(self._value_key) == DIGITAL_STATUS[True]

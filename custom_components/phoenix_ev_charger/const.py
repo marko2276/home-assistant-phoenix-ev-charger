@@ -1,5 +1,5 @@
 DOMAIN = "phoenix_ev_charger"
-DEFAULT_NAME = "Walli"
+DEFAULT_NAME = "Wallbe"
 DEFAULT_SCAN_INTERVAL = 60
 DEFAULT_PORT = 502
 DEFAULT_DEVICE_MODEL = "EV-CC-AC1-M3"
@@ -16,27 +16,33 @@ SWITCHES = {
     "wallbox": ["wallbox", "mdi:electric-switch", True],
 }
 
+
+MIN_CHARGE_CURRENT = 6.0
+MAX_CHARGE_CURRENT = 16.0
+
 BINARY_SENSOR_TYPES = {
     "StatusDigInLD": ["Input LD", "statdiginld", None, "mdi:electric-switch", True],
-    "StatusDigInEN": ["Input EN", "statdiginen", None, "mdi:electric-switch", True],
-    "StatusDigInML": ["Input ML", "statdiginml", None, "mdi:electric-switch", True],
-    "StatusDigInXR": ["Input XR", "statdiginxr", None, "mdi:electric-switch", True],
-    "StatusDigInIN": ["Input IN", "statdiginin", None, "mdi:electric-switch", True],
-    "StatusDigOutER": ["Output ER", "statdigouter", None, "mdi:led-outline", False],
-    "StatusDigOutLR": ["Output LR", "statdigoutlr", None, "mdi:led-outline", False],
-    "StatusDigOutVR": ["Output VR", "statdigoutvr", None, "mdi:led-outline", False],
-    "StatusDigOutCR": ["Output CR", "statdigoutcr", None, "mdi:led-outline", False],
+    #"StatusDigInEN": ["Input EN", "statdiginen", None, "mdi:electric-switch", True],
+    #"StatusDigInML": ["Input ML", "statdiginml", None, "mdi:electric-switch", True],
+    #"StatusDigInXR": ["Input XR", "statdiginxr", None, "mdi:electric-switch", True],
+    #"StatusDigInIN": ["Input IN", "statdiginin", None, "mdi:electric-switch", True],
+    #"StatusDigOutER": ["Output ER", "statdigouter", None, "mdi:led-outline", False],
+    #"StatusDigOutLR": ["Output LR", "statdigoutlr", None, "mdi:led-outline", False],
+    #"StatusDigOutVR": ["Output VR", "statdigoutvr", None, "mdi:led-outline", False],
+    #"StatusDigOutCR": ["Output CR", "statdigoutcr", None, "mdi:led-outline", False],
 }
 
 SENSOR_TYPES = {
     "DeviceState": ["Device State", "devstate", None, "mdi:ev-station"],
-    "EnergyChargeSequence": ["Energy Charge Sequence", "chargesequence", "Wh", "mdi:counter"],
+    "TotalChargedEnergy": ["Total Charged Energy", "totalchargedenergy", "kWh", "mdi:counter"],
+    "ChargingEnergy": ["Charging Energy", "chargingenergy", "kWh", "mdi:counter"],
+    "GridFrequency": ["Grid Frequency", "gridfrequency", "Hz", "mdi:counter"],
     "ActualChargeCurrentSetting": ["Actual Charge Current Setting", "chargecurrentsetting", "A",  "mdi:current-ac"],
-    "RemoteChargeCurrentLimitation": ["Remote Charge Current Limitation", "remotechargecurrentlimit", "A",
+    "MaxChargeCurrentLimitation": ["Max Charge Current Limitation", "maxchargecurrentlimit", "A",
                                       "mdi:current-ac"],
     "CableAssemblyCapability": ["Capability of Cable Assembly", "cablecapability", "A",
                                 "mdi:current-ac"],
-    "ActiveChargingDuration": ["Active Charging Duration", "chargingduration", "h", "mdi:clock-start"],
+    "ActiveChargingDuration": ["Active Charging Duration", "chargingduration", None, "mdi:clock-start"],
     "DigInLD": ["Input LD", "diginld", None, "mdi:wrench-outline"],
     "DigInEN": ["Input EN", "diginen", None, "mdi:wrench-outline"],
     "DigInML": ["Input ML", "diginml", None, "mdi:wrench-outline"],
@@ -50,6 +56,13 @@ SENSOR_TYPES = {
     "MacAddress": ["MAC address", "macaddress", None, "mdi:network-outline"],
     "SerialNumber": ["Serial Number", "serialnr", None, "mdi:textbox-outline"],
     "FirmwareVersion": ["Firmware version", "fwvers", None, None],
+
+    "MainsVoltagePhase1": ["EM Voltage V1", "voltage0", "V",  "mdi:voltage-ac"],
+    "MainsVoltagePhase2": ["EM Voltage V2", "voltage1", "V",  "mdi:voltage-ac"],
+    "MainsVoltagePhase3": ["EM Voltage V3", "voltage2", "V",  "mdi:voltage-ac"],
+    "MainsCurrentPhase1": ["EM Current I1", "current0", "A",  "mdi:current-ac"],
+    "MainsCurrentPhase2": ["EM Current I2", "current1", "A",  "mdi:current-ac"],
+    "MainsCurrentPhase3": ["EM Current I3", "current2", "A",  "mdi:current-ac"],
 }
 
 DEVICE_STATUSSES = {
@@ -61,7 +74,7 @@ DEVICE_STATUSSES = {
     'E': "Errorstate E",
 }
 
-DIGITAL_OUT_FUNCTIONS = {
+DE_DIGITAL_OUT_FUNCTIONS = {
     0:  "Inaktiv",
     1:  "Ladesteuerung im Status A",
     2:  "Ladesteuerung im Status B",
@@ -105,7 +118,7 @@ DIGITAL_OUT_FUNCTIONS = {
     0x29: "Status A oder B1 Authorisierung Blinken",
 }
 
-DIGITAL_IN_FUNCTIONS = {
+DE_DIGITAL_IN_FUNCTIONS = {
     0: "Inaktiv",
     1: "Freigabe Ladevorgang permanentes High-Signal (Default für Eingang EN)",
     2: "Verfügbarkeit Ladestation (Default für Eingang XR)",
@@ -130,7 +143,7 @@ DIGITAL_IN_FUNCTIONS = {
     21: "Fehlerzustand erzeugen",
 }
 
-EN_DIGITAL_OUT_FUNCTIONS = {
+DIGITAL_OUT_FUNCTIONS = {
     0: "Inactive",
     1: "Charging controller in status A",
     2: "Charging controller in status B",
@@ -174,7 +187,7 @@ EN_DIGITAL_OUT_FUNCTIONS = {
     0x29: "State A or B1 Authorize Blink",
 }
 
-EN_DIGITAL_IN_FUNCTIONS = {
+DIGITAL_IN_FUNCTIONS = {
     0: "Inactive",
     1: "Enable charging process by permanent High signal (default for input EN)",
     2: "Charging station availability (default for input XR)",

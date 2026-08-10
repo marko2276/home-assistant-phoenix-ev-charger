@@ -1,16 +1,10 @@
 import logging
-try:
-    from homeassistant.components.switch import SwitchEntity
-except ImportError:
-    from homeassistant.components.switch import SwitchDevice as SwitchEntity
+from homeassistant.components.switch import SwitchEntity
 
 from homeassistant.const import CONF_NAME
-# STATE_ON, STATE_OFF,
-STATE_ON = True
-STATE_OFF = False
-from . import PhoenixEvDevice
-from pymodbus.client import ModbusTcpClient
-from .const import ATTR_MANUFACTURER, DEVICE_STATUSSES, DOMAIN, SWITCHES, DIGITAL_STATUS
+from homeassistant.helpers.entity import DeviceInfo
+
+from .const import ATTR_MANUFACTURER, DOMAIN, SWITCHES
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -20,58 +14,69 @@ async def async_setup_entry(hass, entry, async_add_entities):
     hub = hass.data[DOMAIN][hub_name]["hub"]
 
     _LOGGER.debug("Phoenix ev charger Switch component running ...")
-    devices = []
-    for sw in SWITCHES:
-        devices.append(
-            PhoenixEVSwitch(
-                SWITCHES[sw][0], SWITCHES[sw][1], hub
-            )
-        )
-        _LOGGER.debug("Adding device: %s", SWITCHES[sw][0])
-    async_add_entities(devices)
+    device_info = DeviceInfo(
+        identifiers={(DOMAIN, hub_name)},
+        name=hub_name,
+        manufacturer=ATTR_MANUFACTURER,
+    )
+
+    async_add_entities(
+        [
+            PhoenixEvSwitch(hub_name, hub, device_info, sw, SWITCHES[sw][0], SWITCHES[sw][1])
+            for sw in SWITCHES
+        ]
+    )
 
 
-class PhoenixEVSwitch(PhoenixEvDevice, SwitchEntity):
+class PhoenixEvSwitch(SwitchEntity):
     """Representation of Switch Sensor."""
 
-    # pylint: disable=too-many-instance-attributes
+    _attr_has_entity_name = True
 
-    def __init__(self, name, icon, hub):
+    def __init__(self, hub_name, hub, device_info, switch_key, name, icon):
         """Initialize the sensor."""
-        self._pre = "sw_"
-        self._name = name
+        self._attr_unique_id = f"{hub_name}_switch_{switch_key}"
+        self._attr_name = name
+        self._attr_device_info = device_info
+        self._attr_icon = icon
         self._hub = hub
-        self._state = False
-        self._icon = icon
-        self._data = None
-        self._available = 1
+        self._attr_is_on = False
+        self._attr_available = True
 
     @property
     def is_on(self):
         """Return is_on status."""
-        return self._state
+        return self._attr_is_on
 
     async def async_turn_on(self):
         """Turn On method."""
         _LOGGER.debug(
-            "Sending ON request to SWITCH device %s", self._name
+            "Sending ON request to SWITCH device %s", self.name
         )
-        if not self._hub._client.connected:
-            self._hub._client.connect()
-        self._hub._client.write_coil(address=400,value=True)
-        self._state = STATE_ON
-        self.schedule_update_ha_state(force_refresh=True)
+        if not self._hub.ensure_connected():
+            _LOGGER.error("Unable to turn on %s because charger is disconnected", self.name)
+            return
+        response = self._hub.write_coil(unit=255, address=400, value=True)
+        if response is None or response.isError():
+            _LOGGER.error("Write coil failed while turning on %s", self.name)
+            return
+        self._attr_is_on = True
+        self.async_write_ha_state()
 
     async def async_turn_off(self):
         """Turn Off method."""
         _LOGGER.debug(
-            "Sending OFF request to SWITCH device %s",  self._name
+            "Sending OFF request to SWITCH device %s",  self.name
         )
-        if not self._hub._client.connected:
-            self._hub._client.connect()
-        self._hub._client.write_coil(address=400,value=False)
-        self._state = STATE_OFF
-        self.schedule_update_ha_state(force_refresh=True)
+        if not self._hub.ensure_connected():
+            _LOGGER.error("Unable to turn off %s because charger is disconnected", self.name)
+            return
+        response = self._hub.write_coil(unit=255, address=400, value=False)
+        if response is None or response.isError():
+            _LOGGER.error("Write coil failed while turning off %s", self.name)
+            return
+        self._attr_is_on = False
+        self.async_write_ha_state()
 
     @property
     def should_poll(self):
@@ -79,41 +84,29 @@ class PhoenixEVSwitch(PhoenixEvDevice, SwitchEntity):
         return True
 
     @property
-    def name(self):
-        """Return the name of the sensor."""
-        return self._name
-
-    @property
-    def icon(self):
-        """Return the image of the sensor."""
-        return self._icon
-
-    @property
     def available(self):
         """Return availability."""
-        _LOGGER.debug("Device %s - availability: %s", self._name, self._available)
-        return True if self._available == 1 else False
+        _LOGGER.debug("Device %s - availability: %s", self.name, self._attr_available)
+        return self._attr_available
 
     async def async_update(self):
-        _LOGGER.debug("REFRESHING SWITCH via async_update %s", self._name)
-        self._available = 0
-        if self._hub._client.connected:
-            self._available = 1
-            chargestate_data = self._hub._client.read_coils(address=400, count=1, slave=0)
-            charging = chargestate_data.bits[0]
+        _LOGGER.debug("REFRESHING SWITCH via async_update %s", self.name)
+        self._attr_available = False
+        if self._hub.is_connected() or self._hub.ensure_connected():
+            self._attr_available = True
+            chargestate_data = self._hub.read_coils(unit=255, address=400, count=1)
+            if chargestate_data is None or chargestate_data.isError():
+                _LOGGER.warning("Failed reading switch state for %s", self.name)
+                self._attr_available = False
+                return False
+            charging = bool(chargestate_data.bits[0]) if getattr(chargestate_data, "bits", None) else False
             if charging:
-                _LOGGER.debug("Charging by Switch %s", self._name)
-            chargebyrfid_data = self._hub._client.read_coils(address=436, count=1, slave=0)
-            chargingbyrfid = chargebyrfid_data.bits[0]
-            if chargingbyrfid:
-                _LOGGER.debug("Charging by RFID %s", self._name)
-            if charging or chargingbyrfid:
-                self._state = STATE_ON
-            else:
-                self._state = STATE_OFF
-            _LOGGER.debug(self._state)
-            return self._state
-        else:
-            _LOGGER.debug("Hub not connected - SWITCH %s - %s", self._name, self)
-            self._available = 0
+                _LOGGER.debug("Charging by Switch %s", self.name)
+
+            self._attr_is_on = charging
+            _LOGGER.debug(self._attr_is_on)
+            return self._attr_is_on
+
+        _LOGGER.debug("Hub not connected - SWITCH %s - %s", self.name, self)
+        self._attr_available = False
         return False
